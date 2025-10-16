@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: llm-deployment-system
+    env: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
+    plan: starter
+    branch: main
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PORT
+        fromService:
+          type: web
+          name: llm-deployment-system
+          property: port
+    # Environment variables that need to be set in Render dashboard:
+    # OPENAI_API_KEY - Your OpenAI API key
+    # OPENAI_BASE_URL - https://aipipe.org/openai/v1
+    # GITHUB_TOKEN - Your GitHub personal access token
+    # USER_SECRET - Your user secret (kartikay@14)
+    # SECRET_KEY - Flask secret key (auto-generated if not provided)
+    healthCheckPath: /health
+    disk:
+      name: app-data
+      mountPath: /app/data
+      sizeGB: 1

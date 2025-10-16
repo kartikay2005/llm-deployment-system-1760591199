@@ -58,11 +58,15 @@ app.config.from_object(config)
 openai_client = None
 try:
     from openai import OpenAI
+    
     openai_client = OpenAI(
         api_key=config.OPENAI_API_KEY,
-        base_url=config.OPENAI_BASE_URL
+        base_url=config.OPENAI_BASE_URL,
+        timeout=30.0
     )
+    
     logger.info(f"OpenAI client initialized successfully with base URL: {config.OPENAI_BASE_URL}")
+        
 except ImportError as e:
     logger.warning(f"OpenAI library not available: {e}")
     openai_client = None
@@ -377,7 +381,7 @@ The application should be a complete, working solution that satisfies all the ch
             
             logger.info("Making direct HTTP call to AI Pipe...")
             response = requests.post(
-                "https://aipipe.org/openai/v1/chat/completions",
+                config.OPENAI_BASE_URL + "/chat/completions",
                 headers=headers,
                 json=payload,
                 timeout=120
@@ -883,27 +887,33 @@ except Exception as e:
     logger.error(f"Failed to initialize GitHub manager: {e}")
     github_manager = None
 
-# Track deployment state with persistence
-deployment_state_file = 'deployment_state.json'
+# Track deployment state with persistence (Render-optimized)
+deployment_state_file = os.environ.get('DEPLOYMENT_STATE_FILE', 'deployment_state.json')
 
 def load_deployment_state():
     try:
         if os.path.exists(deployment_state_file):
             with open(deployment_state_file, 'r') as f:
                 return json.load(f)
+        else:
+            # Create default state file if it doesn't exist
+            logger.info(f"Creating new deployment state file: {deployment_state_file}")
+            save_deployment_state()
     except Exception as e:
         logger.warning(f"Could not load deployment state: {e}")
     return {}
 
 def save_deployment_state():
     try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(deployment_state_file), exist_ok=True)
         with open(deployment_state_file, 'w') as f:
             json.dump(deployment_state, f, indent=2)
     except Exception as e:
         logger.error(f"Could not save deployment state: {e}")
 
 deployment_state = load_deployment_state()
-logger.info(f"Loaded deployment state with {len(deployment_state)} records")
+logger.info(f"Loaded deployment state with {len(deployment_state)} records from {deployment_state_file}")
 
 @app.route('/', methods=['GET'])
 def index():
@@ -1208,7 +1218,10 @@ def deploy():
 def health_check():
     try:
         github_status = "ok" if github_manager and github_manager.client else "unavailable"
+        
+        # Simple OpenAI status check - just verify client exists
         openai_status = "ok" if openai_client else "unavailable"
+        
         system_status = "healthy" if github_status == "ok" and openai_status == "ok" else "degraded"
 
         return jsonify({
